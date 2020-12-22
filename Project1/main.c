@@ -20,6 +20,12 @@ struct neurone {
 	double c4;
 };
 
+struct BMU {
+	float distEucl;
+	struct neurone* neurone;
+	struct BMU* nextNeurone;
+};
+
 struct dataRow* vectors;
 
 int dataSetSize;
@@ -70,28 +76,32 @@ void creatVector(char *line, struct dataRow* results, int resultSize) {
 * return average vector of the array
 */
 struct dataRow* normalizeAndAverageVector() {
-	double sumC1 = 0, sumC2 = 0, sumC3 = 0, sumPowC1 = 0, sumPowC2 = 0, sumPowC3 = 0;
+	double sumC1 = 0, sumC2 = 0, sumC3 = 0, sumC4 = 0, sumPowC1 = 0, sumPowC2 = 0, sumPowC3 = 0, sumPowC4 = 0;
 
 	//Normalization
 	for (int i = 0; i < dataSetSize; i++) {
 		sumPowC1 += pow(vectors[i].c1, 2);
 		sumPowC2 += pow(vectors[i].c2, 2);
 		sumPowC3 += pow(vectors[i].c3, 2);
+		sumPowC4 += pow(vectors[i].c4, 2);
 	}
 
 	sumPowC1 = sqrt(sumPowC1);
 	sumPowC2 = sqrt(sumPowC2);
 	sumPowC3 = sqrt(sumPowC3);
+	sumPowC4 = sqrt(sumPowC4);
 
 	for (int i = 0; i < dataSetSize; i++) {
 		vectors[i].c1 = vectors[i].c1 / sumPowC1;
 		vectors[i].c2 = vectors[i].c2 / sumPowC2;
 		vectors[i].c3 = vectors[i].c3 / sumPowC3;
+		vectors[i].c4 = vectors[i].c4 / sumPowC4;
 
 		//averageVector
 		sumC1 += vectors[i].c1;
 		sumC2 += vectors[i].c2;
 		sumC3 += vectors[i].c3;
+		sumC4 += vectors[i].c4;
 	}
 
 	//Return Avg
@@ -99,6 +109,7 @@ struct dataRow* normalizeAndAverageVector() {
 	result->c1 = sumC1 / dataSetSize;
 	result->c2 = sumC2 / dataSetSize;
 	result->c3 = sumC3 / dataSetSize;
+	result->c4 = sumC4 / dataSetSize;
 	return result;
 }
 
@@ -137,6 +148,7 @@ void initNeurones(struct dataRow* avgVector) {
 			newNeurone.c1 = avgVector->c1 + randOffset;
 			newNeurone.c2 = avgVector->c2 + randOffset;
 			newNeurone.c3 = avgVector->c3 + randOffset;
+			newNeurone.c4 = avgVector->c4 + randOffset;
 
 			neurones[i][j] = newNeurone;
 		}
@@ -150,11 +162,42 @@ void displayNeurones() {
 	for (int i = 0; i < NB_NEURONE_COL; i++) {
 		for (int j = 0; j < NB_NEURONE_ROW; j++) {
 			struct neurone* pickedNeurone = &neurones[i][j];
-			printf("{ c1: %f\n ", pickedNeurone->c1);
-			printf("c2: %f\n ", pickedNeurone->c2);
-			printf("c3: %f\n }", pickedNeurone->c3);
 		}
 	}
+}
+
+float euclDistance(struct neurone* neur, struct dataRow* data) {
+	float c1 = (data->c1)-(neur->c1);
+	c1 = pow(c1, 2);
+	float c2 = pow((data->c2 - neur->c2), 2);
+	float c3 = pow((data->c3 - neur->c3), 2);
+	float c4 = pow((data->c4 - neur->c4), 2);
+
+	return (float)sqrt(c1 + c2 + c3 + c4);
+}
+
+struct BMU* findBestMatchUnit(struct dataRow* data) {
+	// Initialisation de la chaine de BMU au premier neurone 
+	struct BMU* bmu = (struct BMU*)malloc(sizeof(struct BMU));
+	bmu->neurone = &neurones[0][0];
+	bmu->distEucl = -1;
+
+	for (int i = 0; i < NB_NEURONE_COL; i++) {
+		for (int j = 0; j < NB_NEURONE_ROW; j++) {
+			float distEucl = euclDistance(&neurones[i][j], data);
+
+			if (bmu->distEucl < distEucl || bmu->distEucl == -1) {
+				bmu->neurone = &neurones[i][j];
+				bmu->distEucl = distEucl;
+			}
+			else if (bmu->distEucl == distEucl) {
+				bmu->nextNeurone = (struct BMU*)malloc(sizeof(struct BMU));
+				bmu->nextNeurone->distEucl = distEucl;
+				bmu->nextNeurone->neurone = &neurones[i][j];
+			}
+		}
+	}
+	return bmu;
 }
 
 int main() {
@@ -168,7 +211,6 @@ int main() {
 	int i = 0;
 	while (fgets(line, sizeof(line), data) && isdigit(line[0])) {
 		creatVector(line, &vectors, i);
-		printf(vectors[i].id);
 		i++;
 	}
 	  
@@ -178,5 +220,14 @@ int main() {
 	initFauxPointeurs();
 	initNeurones(avgVector);
 	displayNeurones();
+	struct BMU* bmu = findBestMatchUnit(&vectors[0]);
+	printf("%f \n ", vectors[0].c1);
+	printf("%f \n ", bmu->neurone->c1);
+	printf("%f \n ", vectors[0].c2);
+	printf("%f \n ", bmu->neurone->c2);
+	printf("%f \n ", vectors[0].c3);
+	printf("%f \n ", bmu->neurone->c3);
+	printf("%f \n ", vectors[0].c4);
+	printf("%f \n ", bmu->neurone->c4);
 	return 0;
 }
