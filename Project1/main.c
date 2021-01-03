@@ -24,6 +24,7 @@ struct BMU {
 	float distEucl;
 	struct neurone* neurone;
 	struct BMU* nextNeurone;
+	int col, row;
 };
 
 struct dataRow* vectors;
@@ -139,15 +140,23 @@ void initNeurones(struct dataRow* avgVector) {
 	const float randomRange = 0.04;
 	for (int i = 0; i < NB_NEURONE_COL; i++) {
 		for (int j = 0; j < NB_NEURONE_ROW; j++) {
-			float randOffset = (float)rand() / (float)(RAND_MAX / randomRange);
-
+			float randOffset = ((float)rand() / (float)(RAND_MAX)) * randomRange;
 			// Map from [0..randomRange] to [-randomRange/2..randomRange/2]
 			randOffset -= randomRange / 2;
 
 			struct neurone newNeurone;
 			newNeurone.c1 = avgVector->c1 + randOffset;
+
+			randOffset = (float)rand() / (float)(RAND_MAX) * randomRange;
+			randOffset -= randomRange / 2;
 			newNeurone.c2 = avgVector->c2 + randOffset;
+
+			randOffset = (float)rand() / (float)(RAND_MAX) * randomRange;
+			randOffset -= randomRange / 2;
 			newNeurone.c3 = avgVector->c3 + randOffset;
+
+			randOffset = (float)rand() / (float)(RAND_MAX) * randomRange;
+			randOffset -= randomRange / 2;
 			newNeurone.c4 = avgVector->c4 + randOffset;
 
 			neurones[i][j] = newNeurone;
@@ -162,13 +171,13 @@ void displayNeurones() {
 	for (int i = 0; i < NB_NEURONE_COL; i++) {
 		for (int j = 0; j < NB_NEURONE_ROW; j++) {
 			struct neurone* pickedNeurone = &neurones[i][j];
+			printf("%f\n", pickedNeurone->c1);
 		}
 	}
 }
 
 float euclDistance(struct neurone* neur, struct dataRow* data) {
-	float c1 = (data->c1)-(neur->c1);
-	c1 = pow(c1, 2);
+	float c1 = pow((data->c1 - neur->c1), 2);
 	float c2 = pow((data->c2 - neur->c2), 2);
 	float c3 = pow((data->c3 - neur->c3), 2);
 	float c4 = pow((data->c4 - neur->c4), 2);
@@ -186,9 +195,12 @@ struct BMU* findBestMatchUnit(struct dataRow* data) {
 		for (int j = 0; j < NB_NEURONE_ROW; j++) {
 			float distEucl = euclDistance(&neurones[i][j], data);
 
-			if (bmu->distEucl < distEucl || bmu->distEucl == -1) {
+			if (bmu->distEucl > distEucl || bmu->distEucl == -1) {
 				bmu->neurone = &neurones[i][j];
 				bmu->distEucl = distEucl;
+				bmu->col = i;
+				bmu->row = j;
+
 			}
 			else if (bmu->distEucl == distEucl) {
 				bmu->nextNeurone = (struct BMU*)malloc(sizeof(struct BMU));
@@ -198,6 +210,64 @@ struct BMU* findBestMatchUnit(struct dataRow* data) {
 		}
 	}
 	return bmu;
+}
+
+void propagateNeigh(struct BMU* bmu, float delta) {
+	for (int i = 0; i < 4; i++) {
+		int rangeVoisin;
+		struct neurone* targetNeurone;
+		switch (i) {
+		case 1:
+			rangeVoisin = NB_NEURONE_COL - bmu->col;
+			targetNeurone = &neurones[bmu->col][bmu->row + j];
+			break;
+
+		case 2:
+			rangeVoisin = NB_NEURONE_ROW - bmu->row;
+			targetNeurone = &neurones[bmu->col + j][bmu->row];
+			break;
+
+		case 3:
+			rangeVoisin = bmu->col;
+			targetNeurone = &neurones[bmu->col][bmu->row - j];
+			break;
+
+		case 4:
+			rangeVoisin = bmu->row;
+			targetNeurone = &neurones[bmu->col - j][bmu->row];
+			break;
+		}
+
+		for (int j = 1; j <= rangeVoisin; j++) {
+			switch (i) {
+				case 1: 
+					targetNeurone = &neurones[bmu->col][bmu->row + j];
+					break;
+
+				case 2:
+					targetNeurone = &neurones[bmu->col + j][bmu->row];
+					break;
+
+				case 3:
+					targetNeurone = &neurones[bmu->col][bmu->row - j];
+					break;
+
+				case 4:
+					targetNeurone = &neurones[bmu->col - j][bmu->row];
+					break;
+			} 
+		}
+	}
+}
+
+void adjustTowardData(struct BMU* bmu, struct dataRow* data) {
+	//TODO IMPLEMENTS FOR MULTIPLES BMUS + ALPHA QUI EVOLUE AVEC L'APRENTISSAGE
+	float alpha = 0.8;
+	float coeffVoisinage = 1;
+	float delta = data->c1 - bmu->neurone->c1;
+	bmu->neurone->c1 += coeffVoisinage * alpha * delta;
+
+	propagateNeigh(bmu, delta);
 }
 
 int main() {
@@ -221,13 +291,7 @@ int main() {
 	initNeurones(avgVector);
 	displayNeurones();
 	struct BMU* bmu = findBestMatchUnit(&vectors[0]);
-	printf("%f \n ", vectors[0].c1);
-	printf("%f \n ", bmu->neurone->c1);
-	printf("%f \n ", vectors[0].c2);
-	printf("%f \n ", bmu->neurone->c2);
-	printf("%f \n ", vectors[0].c3);
-	printf("%f \n ", bmu->neurone->c3);
-	printf("%f \n ", vectors[0].c4);
-	printf("%f \n ", bmu->neurone->c4);
+	printf("%f \n ", bmu->distEucl);
+	adjustTowardData(bmu, &vectors[0]);
 	return 0;
 }
