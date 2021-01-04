@@ -138,9 +138,13 @@ void initFauxPointeurs() {
 */
 void initNeurones(struct dataRow* avgVector) {
 	const double randomRange = 0.04;
+	//Use to change seeding for each neurone
+	int seed = getpid();
+
 	for (int i = 0; i < NB_NEURONE_COL; i++) {
 		for (int j = 0; j < NB_NEURONE_ROW; j++) {
-			double randOffset = ((float)rand() / (double)(RAND_MAX)) * randomRange;
+			srand(seed += getpid());
+			double randOffset = ((double)rand() / (double)(RAND_MAX)) * randomRange;
 			// Map from [0..randomRange] to [-randomRange/2..randomRange/2]
 			randOffset -= randomRange / 2;
 
@@ -176,7 +180,7 @@ void displayNeurones() {
 	}
 }
 
-float euclDistance(struct neurone* neur, struct dataRow* data) {
+double euclDistance(struct neurone* neur, struct dataRow* data) {
 	double c1 = pow((data->c1 - neur->c1), 2);
 	double c2 = pow((data->c2 - neur->c2), 2);
 	double c3 = pow((data->c3 - neur->c3), 2);
@@ -204,7 +208,7 @@ struct BMU* findBestMatchUnit(struct dataRow* data) {
 			}
 			else if (bmu->distEucl == distEucl) {
 				//TODO Verifier le realloc avec plusieurs BMU égaux
-				bmu->nextBmu = (struct BMU*)realloc(bmu, sizeof(struct BMU));
+				bmu->nextBmu = (struct BMU*)malloc(bmu, sizeof(struct BMU));
 				bmu->nextBmu->distEucl = distEucl;
 				bmu->nextBmu->neurone = &neurones[i][j];
 			}
@@ -219,7 +223,10 @@ struct BMU* findBestMatchUnit(struct dataRow* data) {
 
 void adjustNeurone(struct neurone* neurone, struct dataRow* data, double coefficient) {
 	double deltaC1 = data->c1 - neurone->c1;
+	printf("%f\n", neurone->c1);
 	neurone->c1 += coefficient * deltaC1;
+	printf("%f\n", neurone->c1);
+	printf("*****\n");
 
 	double deltaC2 = data->c2 - neurone->c2;
 	neurone->c2 += coefficient * deltaC2;
@@ -236,9 +243,15 @@ void adjustTowardData(struct BMU* bmu, struct dataRow* data) {
 	
 	int neighRange = 2; 
 	int xNeighbStart = bmu->col - neighRange < 0 ? 0 : bmu->col - neighRange;
-	int xNeighbEnd =  NB_NEURONE_COL - bmu->col < neighRange ? NB_NEURONE_COL : NB_NEURONE_COL - bmu->col;
+	int xNeighbEnd =  NB_NEURONE_COL - bmu->col < neighRange ? NB_NEURONE_COL - bmu->col : bmu->col + neighRange;
 	int yNeighbStart = bmu->row - neighRange < 0 ? 0 : bmu->row - neighRange;
-	int yNeighbEnd = NB_NEURONE_ROW - bmu->row < neighRange ? NB_NEURONE_ROW : NB_NEURONE_ROW - bmu->row;
+	int yNeighbEnd = NB_NEURONE_ROW - bmu->row < neighRange ? NB_NEURONE_ROW - bmu->row : bmu->row + neighRange;
+
+	for (int i = xNeighbStart; i <= xNeighbEnd; i++) {
+		for (int j = yNeighbStart; j <= yNeighbEnd; j++) {
+			adjustNeurone(&neurones[i][j], data, 0.8);
+		}
+	}
 }
 
 int main() {
@@ -260,8 +273,10 @@ int main() {
 	fauxPointeurs = (int*) malloc (sizeof(int) * dataSetSize);
 	initFauxPointeurs();
 	initNeurones(avgVector);
-	// displayNeurones();
+	displayNeurones();
 	struct BMU* bmu = findBestMatchUnit(&vectors[0]);
-	adjustTowardData(bmu, &vectors[0]);
+	printf("%d\n", bmu->row);
+	printf("%d\n", bmu->col);
+	//adjustTowardData(bmu, &vectors[0]);
 	return 0;
 }
