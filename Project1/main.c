@@ -18,6 +18,7 @@ struct neurone {
 	double c2;
 	double c3;
 	double c4;
+	char affiliation;
 };
 
 struct BMU {
@@ -44,11 +45,10 @@ int bmuListSize = 1;
 * Test function to display neurones array
 */
 void displayNeurones() {
-	int count = 0;
 	for (int i = 0; i < NB_NEURONE_COL; i++) {
 		for (int j = 0; j < NB_NEURONE_ROW; j++) {
 			struct neurone* pickedNeurone = &neurones[i][j];
-			printf("%d, %d : %f\n", i, j, pickedNeurone->c1);
+			printf("%d, %d : %f, %f, %f, %f\n", i, j, pickedNeurone->c1, pickedNeurone->c2, pickedNeurone->c3, pickedNeurone->c4);
 		}
 	}
 }
@@ -58,7 +58,8 @@ void displayNeurones() {
 */
 void displayVectors(int size) {
 	for (int i = 0; i < size; i++) {
-		printf("%f, %f, %f, %f\n", vectors[i].c1, vectors[i].c2, vectors[i].c3, vectors[i].c4);
+		//printf("%f, %f, %f, %f\n", vectors[i].c1, vectors[i].c2, vectors[i].c3, vectors[i].c4);
+		printf(vectors[i].id);
 	}
 }
 
@@ -162,8 +163,6 @@ void initFauxPointeurs() {
 * Init neurones with avgVector value +-randomRange
 */
 void initNeurones(struct dataRow* avgVector) {
-	printf("%%%%%%%%");
-	printf("%f, %f, %f, %f\n", avgVector->c1, avgVector->c2, avgVector->c3, avgVector->c4);
 	const double randomRange = 0.4;
 	//Use to change seeding for each neurone
 	int seed = getpid();
@@ -190,6 +189,7 @@ void initNeurones(struct dataRow* avgVector) {
 			randOffset -= randomRange / 2;
 			newNeurone.c4 = avgVector->c4 + randOffset;
 
+			newNeurone.affiliation = '0';
 			neurones[i][j] = newNeurone;
 		}
 	}
@@ -202,6 +202,15 @@ double euclDistance(struct neurone* neur, struct dataRow* data) {
 	double c4 = pow((data->c4 - neur->c4), 2);
 
 	return (double)sqrt(c1 + c2 + c3 + c4);
+}
+
+void insertNewBmu(struct BMU* bmu, struct BMU* newBmu) {
+	if (bmu->nextBmu == NULL) {
+		bmu->nextBmu = newBmu;
+	}
+	else {
+		insertNewBmu(bmu->nextBmu, newBmu);
+	}
 }
 
 void freeBMUMemory(struct BMU* bmu) {
@@ -222,23 +231,25 @@ struct BMU* findBestMatchUnit(struct dataRow* data) {
 		for (int j = 0; j < NB_NEURONE_ROW; j++) {
 			double distEucl = euclDistance(&neurones[i][j], data);
 			if (bmu->distEucl > distEucl || bmu->distEucl == -1) {
-				printf("(%f)\n", distEucl);
 				bmu->neurone = &neurones[i][j];
 				bmu->distEucl = distEucl;
 				bmu->col = i;
 				bmu->row = j;
 
 				if (bmu->nextBmu != NULL) {
-					freeBMUMemory(bmu->nextBmu);
-					bmuListSize = 1;
+					//freeBMUMemory(bmu->nextBmu);
+					bmu->nextBmu = NULL;
 				}
+				bmuListSize = 1;
 			}
 			else if (bmu->distEucl == distEucl) {
-				//TODO Verifier le realloc avec plusieurs BMU égaux
-				bmu->nextBmu = (struct BMU*)malloc(bmu, sizeof(struct BMU));
-				bmu->nextBmu->distEucl = distEucl;
-				bmu->nextBmu->neurone = &neurones[i][j];
-				bmu->nextBmu->nextBmu = NULL;
+				struct BMU* newBmu = (struct BMU*)malloc(bmu, sizeof(struct BMU));
+				newBmu->distEucl = distEucl;
+				newBmu->neurone = &neurones[i][j];
+				newBmu->col = i;
+				newBmu->row = j;
+				newBmu->nextBmu = NULL;
+				insertNewBmu(bmu, newBmu);
 				bmuListSize++;
 			}
 		}
@@ -269,6 +280,18 @@ void adjustNeurone(struct neurone* neurone, struct dataRow* data, double coeffic
 	neurone->c4 += coefficient * deltaC4;
 }
 
+void assignAffiliation(struct neurone* neurone, char* dataId) {
+	if (strcmp(dataId, "Iris-setosa\n") == 0) {
+		neurone->affiliation = 'S';
+	}
+	else if (strcmp(dataId, "Iris-versicolor\n") == 0) {
+		neurone->affiliation = 'E';
+	}
+	else if (strcmp(dataId, "Iris-virginica\n") == 0) {
+		neurone->affiliation = 'I';
+	}
+}
+
 void adjustTowardData(struct BMU* bmu, struct dataRow* data, double coeff) {
 	//Chose random BMU if there are multiple ones
 	if (bmuListSize > 1) {
@@ -281,24 +304,39 @@ void adjustTowardData(struct BMU* bmu, struct dataRow* data, double coeff) {
 		}
 	}
 
-	int neighRange = 3; 
+	int neighRange = 2; 
 	int xNeighbStart = bmu->col - neighRange < 0 ? 0 : bmu->col - neighRange;
-	int xNeighbEnd =  NB_NEURONE_COL - bmu->col < neighRange ? NB_NEURONE_COL - bmu->col : bmu->col + neighRange;
+	int xNeighbEnd = bmu->col + neighRange < NB_NEURONE_COL ? bmu->col + neighRange : NB_NEURONE_COL;
 	int yNeighbStart = bmu->row - neighRange < 0 ? 0 : bmu->row - neighRange;
-	int yNeighbEnd = NB_NEURONE_ROW - bmu->row < neighRange ? NB_NEURONE_ROW - bmu->row : bmu->row + neighRange;
+	int yNeighbEnd = bmu->row + neighRange < NB_NEURONE_ROW  ? bmu->row + neighRange : NB_NEURONE_ROW;
 
 	for (int i = xNeighbStart; i <= xNeighbEnd; i++) {
 		for (int j = yNeighbStart; j <= yNeighbEnd; j++) {
 			adjustNeurone(&neurones[i][j], data, coeff);
-			printf("%d, %d: %f \n", i, j, &neurones[i][j].c1);
+			assignAffiliation(&neurones[i][j], data->id);
 		}
 	}
+}
+
+void displayNeuronesAffiliation() {
+	for (int i = 0; i < NB_NEURONE_COL; i++) {
+		for (int j = 0; j < NB_NEURONE_ROW; j++) {
+			struct neurone* pickedNeurone = &neurones[i][j];
+			printf(" %c ", pickedNeurone->affiliation);
+		}
+		printf("\n");
+	}
+}
+
+void predictRace(struct dataRow* vector) {
+	struct BMU* bmu = findBestMatchUnit(vector);
+	printf("%c\n", bmu->neurone->affiliation);
 }
 
 int main() {
 	char line[128];
 
-	FILE* data = fopen("iris.data", "r");
+	FILE* data = fopen("iris3.data", "r");
 	if (data == NULL) {
 		perror("Error opening file");
 		return(-1);
@@ -314,13 +352,15 @@ int main() {
 	fauxPointeurs = (int*) malloc (sizeof(int) * dataSetSize);
 	initFauxPointeurs();
 	initNeurones(avgVector);
-	displayVectors(2);
-	//displayNeurones();
-	for (int j = 0; j < 2; j++) {
-		struct BMU* bmu = findBestMatchUnit(&vectors[j]);
-		printf("(%d, %d: %f, %f, %f, %f)\n", bmu->col, bmu->row, bmu->neurone->c1, bmu->neurone->c2, bmu->neurone->c3, bmu->neurone->c4);
-		adjustTowardData(bmu, &vectors[j], 0.8);
+	for (int j = 0; j < i; j++) {
+		struct BMU* bmu = findBestMatchUnit(&vectors[fauxPointeurs[j]]);
+		adjustTowardData(bmu, &vectors[fauxPointeurs[j]], 0.8);
+		//printf("|||%d, %d : %f, %f, %f, %f\n", bmu->col, bmu->row, bmu->neurone->c1, bmu->neurone->c2, bmu->neurone->c3, bmu->neurone->c4);
+		//displayNeuronesAffiliation();
+		printf(" \n////////////// \n");
 	}
-	printf("/////////////////////////");
+	for (int k = 0; k < dataSetSize; k++) {
+		predictRace(&vectors[k]);
+	}
 	return 0;
 }
