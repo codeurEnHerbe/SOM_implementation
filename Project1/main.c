@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <time.h>
+#include <stdbool.h> 
 
 struct dataRow {
 	double c1;
@@ -19,6 +20,7 @@ struct neurone {
 	double c3;
 	double c4;
 	char affiliation;
+	int activationCount[3];
 };
 
 struct BMU {
@@ -39,6 +41,9 @@ static const int NB_NEURONE_ROW = 10;
 struct neurone neurones[6][10];
 
 int bmuListSize = 1;
+char ID_SETOSA = 'S';
+char ID_VERSICOLOR = 'E';
+char ID_VIRGINICA = 'I';
 
 
 /*
@@ -58,7 +63,6 @@ void displayNeurones() {
 */
 void displayVectors(int size) {
 	for (int i = 0; i < size; i++) {
-		//printf("%f, %f, %f, %f\n", vectors[i].c1, vectors[i].c2, vectors[i].c3, vectors[i].c4);
 		printf(vectors[i].id);
 	}
 }
@@ -159,6 +163,12 @@ void initFauxPointeurs() {
 	}
 }
 
+void fillPreferencesArrays(struct neurone* neurone) {
+	for (int i = 0; i < 3; i++) {
+		neurone->activationCount[i] = 0;
+	}
+}
+
 /*
 * Init neurones with avgVector value +-randomRange
 */
@@ -190,6 +200,7 @@ void initNeurones(struct dataRow* avgVector) {
 			newNeurone.c4 = avgVector->c4 + randOffset;
 
 			newNeurone.affiliation = '0';
+			fillPreferencesArrays(&newNeurone);
 			neurones[i][j] = newNeurone;
 		}
 	}
@@ -262,13 +273,7 @@ struct BMU* findBestMatchUnit(struct dataRow* data) {
 */
 void adjustNeurone(struct neurone* neurone, struct dataRow* data, double coefficient) {
 	double deltaC1 = data->c1 - neurone->c1;
-	//printf("%f\n", neurone->c1);
 	neurone->c1 += coefficient * deltaC1;
-	/*printf("%f\n", neurone->c1);
-	printf("*****\n");
-	printf("%f\n", data->c1);
-	printf("******************\n");*/
-
 
 	double deltaC2 = data->c2 - neurone->c2;
 	neurone->c2 += coefficient * deltaC2;
@@ -282,18 +287,18 @@ void adjustNeurone(struct neurone* neurone, struct dataRow* data, double coeffic
 
 void assignAffiliation(struct neurone* neurone, char* dataId) {
 	if (strcmp(dataId, "Iris-setosa\n") == 0) {
-		neurone->affiliation = 'S';
+		neurone->activationCount[0]++;
 	}
 	else if (strcmp(dataId, "Iris-versicolor\n") == 0) {
-		neurone->affiliation = 'E';
+		neurone->activationCount[1]++;
 	}
 	else if (strcmp(dataId, "Iris-virginica\n") == 0) {
-		neurone->affiliation = 'I';
+		neurone->activationCount[2]++;
 	}
+
 }
 
 void adjustTowardData(struct BMU* bmu, struct dataRow* data, double coeff) {
-	//Chose random BMU if there are multiple ones
 	if (bmuListSize > 1) {
 		srand(getpid());
 		int randomIndex = rand() % (bmuListSize - 1);
@@ -318,19 +323,64 @@ void adjustTowardData(struct BMU* bmu, struct dataRow* data, double coeff) {
 	}
 }
 
-void displayNeuronesAffiliation() {
+char* evaluateActivationTedencies(struct neurone* neurone) {
+	int indexMaxTendencie = -1;
+	int maxActivation = -1;
+	bool borderNeuron = false;
+
+	for (int i = 0; i < 3; i++) {
+		if (neurone->activationCount[i] != 0) {
+			if (neurone->activationCount[i] > maxActivation) {
+				maxActivation = neurone->activationCount[i];
+				indexMaxTendencie = i;
+				borderNeuron = false;
+			}
+			else if(neurone->activationCount[i] == maxActivation && neurone->activationCount[i] != 0){
+				borderNeuron = true;
+			}
+		}
+	}
+
+	if (indexMaxTendencie == 0) {
+		neurone->affiliation = ID_SETOSA;
+	}
+	else if (indexMaxTendencie == 1) {
+		neurone->affiliation = ID_VERSICOLOR;
+	}
+	else if (indexMaxTendencie == 2) {
+		neurone->affiliation = ID_VIRGINICA;
+	}
+	else {
+		neurone->affiliation = 'O';
+	}
+	if (borderNeuron) {
+		printf("\x1b[31m %c \x1b[0m", neurone->affiliation);
+	}
+	else {
+		printf(" %c ", neurone->affiliation);
+	}
+}
+
+void displayNeuronesAffiliation(struct BMU* bmu) {
 	for (int i = 0; i < NB_NEURONE_COL; i++) {
 		for (int j = 0; j < NB_NEURONE_ROW; j++) {
-			struct neurone* pickedNeurone = &neurones[i][j];
-			printf(" %c ", pickedNeurone->affiliation);
+			evaluateActivationTedencies(&neurones[i][j]);
 		}
 		printf("\n");
 	}
 }
 
-void predictRace(struct dataRow* vector) {
+// return true if the prediction was succesful false if not
+int predictRace(struct dataRow* vector) {
 	struct BMU* bmu = findBestMatchUnit(vector);
-	printf("%c\n", bmu->neurone->affiliation);
+	//printf("flower race: %srow: %d col: %d \n", vector->id, bmu->col, bmu->row);
+	
+	if (strcmp(vector->id, "Iris-setosa\n") == 0 && bmu->neurone->affiliation == ID_SETOSA ||
+		strcmp(vector->id, "Iris-versicolor\n") == 0 && bmu->neurone->affiliation == ID_VERSICOLOR ||
+		strcmp(vector->id, "Iris-virginica\n") == 0 && bmu->neurone->affiliation == ID_VIRGINICA) {
+		return 1;
+	}
+	return 0;
 }
 
 int main() {
@@ -354,13 +404,16 @@ int main() {
 	initNeurones(avgVector);
 	for (int j = 0; j < i; j++) {
 		struct BMU* bmu = findBestMatchUnit(&vectors[fauxPointeurs[j]]);
-		adjustTowardData(bmu, &vectors[fauxPointeurs[j]], 0.8);
-		//printf("|||%d, %d : %f, %f, %f, %f\n", bmu->col, bmu->row, bmu->neurone->c1, bmu->neurone->c2, bmu->neurone->c3, bmu->neurone->c4);
-		//displayNeuronesAffiliation();
+		adjustTowardData(bmu, &vectors[fauxPointeurs[j]], j < 37 ? 0.8 : 0.2);
+		displayNeuronesAffiliation(bmu);
 		printf(" \n////////////// \n");
 	}
+	initFauxPointeurs();
+	int accruacy = 0;
 	for (int k = 0; k < dataSetSize; k++) {
-		predictRace(&vectors[k]);
+		accruacy += predictRace(&vectors[fauxPointeurs[k]]);
 	}
+	double ratio = (double)accruacy / (double)dataSetSize;
+	printf("SOM has %f percent accruacy", ratio * 100);
 	return 0;
 }
